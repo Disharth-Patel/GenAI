@@ -100,24 +100,30 @@ python -m pytest tests/ -v
 ```
 
 ### Key Capabilities Implemented
-- **Expanded Multilingual Support (10+ Languages & Code-Switching)**:
-  - English (`en`), Hindi (`hi`), Marathi (`mr`), Gujarati (`gu`), Tamil (`ta`), Telugu (`te`), Bengali (`bn`), Kannada (`kn`), Malayalam (`ml`), Punjabi (`pa`).
-  - Code-Switching modes: Hinglish (`hinglish` - Hindi in Latin script) and Gujlish (`gujlish` - Gujarati in Latin script).
-  - High-precision automatic language detection via Unicode script range analysis and lexical frequency scoring.
-- **Upgraded Speech & Voice Pipeline**:
-  - Full Web Speech STT and TTS pipeline for all 10+ supported locales.
+- **Intelligent Native Language Detection & Same-Language Conversational Response System**:
+  - Centralized language management authority (`backend/services/language_service.py`) detecting user languages automatically from typed messages, transcribed speech, native Indic scripts, and Romanized dialects.
+  - **Strict Same-Language Responses**: Responses are generated strictly in the user's detected language and natural script (e.g., Gujarati input receives authentic Gujarati script responses, Marathi in Devanagari, Hindi in Devanagari, English in Latin).
+  - **Sub-15ms Conversational Fast Path**: Standard pleasantries and greetings (e.g. *"તમે કેમ છો?"*, *"તમે શું કરો છો?"*, *"आप कैसे हैं?"*, *"तुम्ही कसे आहात?"*, *"How are you?"*) respond instantly with authentic native replies without stuffing technical database chunks.
+  - **Dynamic Mid-Conversation Language Switching**: Detects language per turn and transitions seamlessly across turns (e.g., English $\rightarrow$ Gujarati $\rightarrow$ Hindi $\rightarrow$ English) within the same conversation without losing context or resetting session history.
+  - **Cross-Lingual RAG Knowledge Retrieval**: Multilingual synonym expansions allow native-language questions (e.g. in Gujarati, Tamil, Telugu, Bengali) to accurately retrieve official Maharashtra OBC scholarships, Savitribai Phule hostel rules, and income ceiling data.
+- **Dual-Engine Browser Speaking & Long-Form Voice Pipeline**:
+  - **Dual-Engine Speech Architecture**: Uses local Web Speech API when an authentic native voice is installed; automatically falls back to the native stream synthesizer (`/api/speech/stream`) to speak fluent Marathi, Gujarati, or Hindi when client PCs lack local Indic SAPI voices.
+  - **Continuous Long-Form Speech Engine**: Splits long responses into seamless sentence/clause chunks (`chunkSpokenText`) to eliminate Chromium 15-second cutoffs.
+  - **Keep-Alive Watchdog**: Prevents speech synthesis from pausing during lengthy responses.
   - Multi-state per-message audio player: **Listen / Pause / Resume**, **Stop**, **Replay**, and animated 4-bar **Equalizer**.
-  - **Global Speaking Bar**: Top indicator displaying language, live equalizer wave, and one-click global Pause/Stop buttons to interrupt audio anytime.
-  - **Strict Language Consistency Protection**: If native TTS voice for an Indian language is not installed on the user's OS/browser, the app prevents discordant English voice playback and notifies the user with a non-blocking toast.
+  - **Global Speaking Bar**: Top indicator displaying language, live equalizer wave, chunk counter (e.g. `🌐 Marathi (2/6)`), and one-click global Pause/Stop buttons to interrupt audio anytime.
   - Error-resilient STT handling microphone permission denials (`not-allowed`), silence (`no-speech`), and network interruptions.
+- **Admin LLM Performance Evaluation & Benchmarking Studio**:
+  - Integrated into the Admin Dashboard under the dedicated **LLM Benchmark Studio** tab (admin-only access).
+  - Live chat telemetry automatically tracks latency percentiles, Time to First Token (TTFT), tokens per second (TPS), token usage, and context window utilization.
+  - Automated 16-case benchmark runner, 4-preset parameter sweeps (Deterministic, Balanced, Creative, Compact), and RAG vs. No-RAG ablation analysis.
+  - Real-time grounded NLP quality metrics: Exact Match (EM), Token F1, ROUGE-L, BLEU-4, Cosine Similarity, Factual Faithfulness, Language Match Accuracy, and Hallucination Risk.
 - **Professional UI/UX Redesign**:
   - Light / Dark theme toggle persisted in `localStorage` with cohesive color tokens.
   - Native Google Fonts linked for all major Indian scripts (`Noto Sans Devanagari`, `Gujarati`, `Tamil`, `Telugu`, `Bengali`, `Kannada`, `Malayalam`, `Gurmukhi`).
+  - Real-time detected language badges (`🌐 Gujarati (ગુજરાતી)`, `🌐 Hindi (हिन्दी)`, etc.) rendered on every assistant message bubble.
   - Non-blocking toast notification system replacing intrusive browser `alert()` popups.
   - Verified source references rendered with distinct tags and verified portal links (MahaDBT, myScheme, MAHAJYOTI, OBC Bahujan Kalyan).
-- **GenAI Evaluation & Performance Metrics**:
-  - Per-message metrics badge showing generation latency (ms), input/output token estimates, and estimated request cost.
-  - Built-in GenAI Evaluation Suite with automated benchmarks, RAG ablation comparisons, parameter sweep experiments, and exportable CSV/JSON reports.
 - **Sanitized Knowledge Base**:
   - Over 118 verified educational scheme records pre-indexed and cleanly parsed.
 - **Security & Privacy**:

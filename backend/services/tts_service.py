@@ -2,6 +2,8 @@ import os
 import logging
 from typing import Dict, Any
 
+from backend.services.language_service import language_service
+
 logger = logging.getLogger("tts_service")
 
 # Recommended standard voice locales for target languages
@@ -17,6 +19,7 @@ VOICE_MAPPINGS = {
     "ml": {"lang": "ml-IN", "alt": "ml", "name": "Malayalam (India)"},
     "pa": {"lang": "pa-IN", "alt": "pa", "name": "Punjabi (India)"},
     "hinglish": {"lang": "hi-IN", "alt": "en-IN", "name": "Hindi / English (India)"},
+    "gujlish": {"lang": "gu-IN", "alt": "gu", "name": "Gujarati / English (India)"},
 }
 
 

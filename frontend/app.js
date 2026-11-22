@@ -936,8 +936,85 @@ function cancelVoiceRecording() {
 }
 
 // ============================================================================
-// Text-to-Speech (TTS SpeechSynthesis)
+// Continuous Long-Form Text-to-Speech Engine (Queue & Keep-Alive Watchdog)
 // ============================================================================
+let speechQueue = [];
+let currentQueueIndex = 0;
+let speechKeepAliveTimer = null;
+let isSpeakingActive = false;
+
+function startSpeechWatchdog() {
+  stopSpeechWatchdog();
+  // Chrome and Chromium browsers pause SpeechSynthesis after ~14 seconds.
+  // This watchdog pulses pause/resume to keep long speeches streaming continuously.
+  speechKeepAliveTimer = setInterval(() => {
+    if (typeof window !== "undefined" && window.speechSynthesis && window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+      window.speechSynthesis.pause();
+      window.speechSynthesis.resume();
+    }
+  }, 9000);
+}
+
+function stopSpeechWatchdog() {
+  if (speechKeepAliveTimer) {
+    clearInterval(speechKeepAliveTimer);
+    speechKeepAliveTimer = null;
+  }
+}
+
+function chunkSpokenText(text, maxChunkLen = 160) {
+  // Clean markdown, code, and raw URLs
+  const clean = text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/```[\s\S]*?```/g, "Code example omitted.")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/[#*_\-\~>]/g, " ")
+    .replace(/https?:\/\/\S+/g, "link")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!clean) return [];
+
+  // Split text by punctuation (. ! ? । \n ;)
+  const sentences = clean.match(/[^.!?।;\n]+[.!?।;\n]+|[^.!?।;\n]+$/g) || [clean];
+  const chunks = [];
+  let buffer = "";
+
+  for (const s of sentences) {
+    const trimmed = s.trim();
+    if (!trimmed) continue;
+
+    if ((buffer + " " + trimmed).length <= maxChunkLen) {
+      buffer = buffer ? (buffer + " " + trimmed) : trimmed;
+    } else {
+      if (buffer) {
+        chunks.push(buffer);
+        buffer = "";
+      }
+      if (trimmed.length > maxChunkLen) {
+        const subParts = trimmed.split(/([,:]|\s{3,})/);
+        let subBuf = "";
+        for (const part of subParts) {
+          if ((subBuf + part).length <= maxChunkLen) {
+            subBuf += part;
+          } else {
+            if (subBuf.trim()) chunks.push(subBuf.trim());
+            subBuf = part;
+          }
+        }
+        if (subBuf.trim()) buffer = subBuf.trim();
+      } else {
+        buffer = trimmed;
+      }
+    }
+  }
+  if (buffer.trim()) {
+    chunks.push(buffer.trim());
+  }
+
+  return chunks.length > 0 ? chunks : [clean];
+}
+
 function resetActiveAudioUI() {
   if (activeSpeakerData) {
     const { playBtn, stopBtn, replayBtn, equalizer, bubble } = activeSpeakerData;
@@ -965,6 +1042,20 @@ function resetActiveAudioUI() {
 }
 
 function stopSpeaking() {
+  isSpeakingActive = false;
+  stopSpeechWatchdog();
+  speechQueue = [];
+  currentQueueIndex = 0;
+
+  const audioElement = document.getElementById("audioPlayer");
+  if (audioElement) {
+    try {
+      audioElement.pause();
+      audioElement.currentTime = 0;
+      audioElement.src = "";
+    } catch (e) {}
+  }
+
   if (typeof window !== "undefined" && window.speechSynthesis) {
     window.speechSynthesis.cancel();
   }
@@ -972,49 +1063,53 @@ function stopSpeaking() {
 }
 
 function pauseSpeaking() {
+  const audioElement = document.getElementById("audioPlayer");
+  if (audioElement && !audioElement.paused) {
+    audioElement.pause();
+  }
+
   if (window.speechSynthesis && window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
     window.speechSynthesis.pause();
-    if (activeSpeakerData) {
-      activeSpeakerData.isPaused = true;
-      if (activeSpeakerData.playBtn) {
-        activeSpeakerData.playBtn.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-          </svg>
-          <span>Resume</span>
-        `;
-      }
-      if (activeSpeakerData.equalizer) activeSpeakerData.equalizer.classList.add("paused");
-    }
-    if (pauseResumeGlobalBtn) {
-      pauseResumeGlobalBtn.innerHTML = `
+  }
+  stopSpeechWatchdog();
+
+  if (activeSpeakerData) {
+    activeSpeakerData.isPaused = true;
+    if (activeSpeakerData.playBtn) {
+      activeSpeakerData.playBtn.innerHTML = `
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
           <polygon points="5 3 19 12 5 21 5 3"></polygon>
         </svg>
         <span>Resume</span>
       `;
     }
+    if (activeSpeakerData.equalizer) activeSpeakerData.equalizer.classList.add("paused");
+  }
+  if (pauseResumeGlobalBtn) {
+    pauseResumeGlobalBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+      </svg>
+      <span>Resume</span>
+    `;
   }
 }
 
 function resumeSpeaking() {
+  const audioElement = document.getElementById("audioPlayer");
+  if (audioElement && audioElement.paused && audioElement.src) {
+    audioElement.play().catch(() => {});
+  }
+
   if (window.speechSynthesis && window.speechSynthesis.paused) {
     window.speechSynthesis.resume();
-    if (activeSpeakerData) {
-      activeSpeakerData.isPaused = false;
-      if (activeSpeakerData.playBtn) {
-        activeSpeakerData.playBtn.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <rect x="6" y="4" width="4" height="16"></rect>
-            <rect x="14" y="4" width="4" height="16"></rect>
-          </svg>
-          <span>Pause</span>
-        `;
-      }
-      if (activeSpeakerData.equalizer) activeSpeakerData.equalizer.classList.remove("paused");
-    }
-    if (pauseResumeGlobalBtn) {
-      pauseResumeGlobalBtn.innerHTML = `
+  }
+  startSpeechWatchdog();
+
+  if (activeSpeakerData) {
+    activeSpeakerData.isPaused = false;
+    if (activeSpeakerData.playBtn) {
+      activeSpeakerData.playBtn.innerHTML = `
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
           <rect x="6" y="4" width="4" height="16"></rect>
           <rect x="14" y="4" width="4" height="16"></rect>
@@ -1022,6 +1117,16 @@ function resumeSpeaking() {
         <span>Pause</span>
       `;
     }
+    if (activeSpeakerData.equalizer) activeSpeakerData.equalizer.classList.remove("paused");
+  }
+  if (pauseResumeGlobalBtn) {
+    pauseResumeGlobalBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+        <rect x="6" y="4" width="4" height="16"></rect>
+        <rect x="14" y="4" width="4" height="16"></rect>
+      </svg>
+      <span>Pause</span>
+    `;
   }
 }
 
@@ -1034,78 +1139,149 @@ function togglePauseResumeGlobalSpeech() {
   }
 }
 
-function speakText(text, lang = "en", triggerBtn = null, bubble = null, stopBtn = null, replayBtn = null, equalizer = null) {
-  if (!window.speechSynthesis) {
-    showToast("Audio synthesis is not supported in this browser.", "warning");
-    return;
-  }
-
-  // Interruption: Stop any previous playback immediately
-  stopSpeaking();
-
-  // If called without element references (e.g. from auto-play), locate elements within bubble
-  if (bubble) {
-    if (!triggerBtn) triggerBtn = bubble.querySelector(".voice-play-btn");
-    if (!stopBtn) stopBtn = bubble.querySelector(".voice-stop-btn");
-    if (!replayBtn) replayBtn = bubble.querySelector(".voice-replay-btn");
-    if (!equalizer) equalizer = bubble.querySelector(".bubble-speaking-equalizer");
-  }
-
-  // Strip markdown formatting, code, and raw URLs before synthesizing
-  const cleanSpokenText = text
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/```[\s\S]*?```/g, "Code example omitted from audio.")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/[#*_\-\~>]/g, " ")
-    .replace(/https?:\/\/\S+/g, "link")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!cleanSpokenText) return;
-
-  const targetLocale = SPEECH_LOCALE_MAP[lang] || "en-IN";
-  if (availableSpeechVoices.length === 0) {
+function findBestVoice(locale, langCode) {
+  if (!availableSpeechVoices || availableSpeechVoices.length === 0) {
     availableSpeechVoices = window.speechSynthesis.getVoices();
   }
+  if (!availableSpeechVoices || availableSpeechVoices.length === 0) return null;
+  const targetLoc = (locale || "").toLowerCase().replace("_", "-");
+  const langPrefix = targetLoc.slice(0, 2);
 
-  // Find matching voice by exact locale or 2-letter language code
-  const langPrefix = targetLocale.slice(0, 2).toLowerCase();
-  const matchedVoice = availableSpeechVoices.find((v) => {
-    const vLang = (v.lang || "").toLowerCase().replace("_", "-");
-    return vLang === targetLocale.toLowerCase() || vLang.startsWith(langPrefix);
+  // 1. Exact locale match (e.g. 'mr-IN', 'hi-IN', 'gu-IN', 'en-IN')
+  let voice = availableSpeechVoices.find((v) => (v.lang || "").toLowerCase().replace("_", "-") === targetLoc);
+  if (voice) return voice;
+
+  // 2. Language prefix match (e.g. 'mr', 'hi', 'gu', 'ta', 'te')
+  voice = availableSpeechVoices.find((v) => (v.lang || "").toLowerCase().replace("_", "-").startsWith(langPrefix));
+  if (voice) return voice;
+
+  // 3. Name-based match (e.g. "Marathi", "Hindi", "Gujarati", "Swara", "Hemant")
+  const langName = (LANG_DISPLAY_NAMES[langCode] || "").toLowerCase().split(" ")[0];
+  voice = availableSpeechVoices.find((v) => {
+    const vName = (v.name || "").toLowerCase();
+    return vName.includes(langPrefix) || (langName && vName.includes(langName));
   });
+  if (voice) return voice;
 
-  // Strict Language Consistency Protection:
-  // Never let an English voice mispronounce Indian language text!
-  if (lang !== "en" && lang !== "auto" && !matchedVoice) {
-    const langName = LANG_DISPLAY_NAMES[lang] || lang;
-    showToast(
-      `Notice: Native voice for ${langName} (${targetLocale}) is not installed on your browser/system. Displaying complete text response.`,
-      "info",
-      6000
-    );
+  // 4. Indic phonetics compatibility fallback:
+  // Marathi and Hindi share Devanagari script; Gujarati shares Indic phonetic structure
+  if (["mr", "gu", "hinglish", "gujlish"].includes(langCode)) {
+    voice = availableSpeechVoices.find((v) => {
+      const vl = (v.lang || "").toLowerCase().replace("_", "-");
+      return vl === "hi-in" || vl.startsWith("hi");
+    });
+    if (voice) return voice;
+  }
+
+  // 5. Any Indian English / Indian voice (*-IN)
+  voice = availableSpeechVoices.find((v) => (v.lang || "").toLowerCase().replace("_", "-").endsWith("-in"));
+  if (voice) return voice;
+
+  // 6. Default system voice
+  return availableSpeechVoices.find((v) => v.default) || availableSpeechVoices[0] || null;
+}
+
+function playNextSpeechChunk() {
+  if (!isSpeakingActive || !activeSpeakerData) return;
+  if (currentQueueIndex >= speechQueue.length) {
+    stopSpeaking();
     return;
   }
 
-  const utterance = new SpeechSynthesisUtterance(cleanSpokenText);
-  utterance.lang = targetLocale;
-  if (matchedVoice) utterance.voice = matchedVoice;
+  const chunkText = speechQueue[currentQueueIndex];
+  const { lang, triggerBtn, stopBtn, replayBtn, equalizer, bubble, voice, targetLocale } = activeSpeakerData;
+
+  // Dual-Engine Browser Speech Architecture:
+  // If the client PC has no native or compatible Indic voice (e.g. Windows only has English SAPI voices),
+  // stream natural native audio via the #audioPlayer HTML5 element from /api/speech/stream!
+  const audioElement = document.getElementById("audioPlayer");
+  const isIndicLang = ["mr", "gu", "hi", "ta", "te", "bn", "kn", "ml", "pa"].includes(lang);
+  const hasNativeIndicVoice = voice && (
+    (voice.lang || "").toLowerCase().includes("-in") ||
+    (voice.lang || "").toLowerCase().startsWith("mr") ||
+    (voice.lang || "").toLowerCase().startsWith("hi") ||
+    (voice.lang || "").toLowerCase().startsWith("gu")
+  );
+
+  if (isIndicLang && !hasNativeIndicVoice && audioElement) {
+    audioElement.src = `${API_BASE}/api/speech/stream?language=${encodeURIComponent(lang)}&text=${encodeURIComponent(chunkText)}`;
+
+    audioElement.onplay = () => {
+      if (triggerBtn) {
+        triggerBtn.classList.add("active-speaker");
+        triggerBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="4" width="4" height="16"></rect>
+            <rect x="14" y="4" width="4" height="16"></rect>
+          </svg>
+          <span>Pause</span>
+        `;
+      }
+      if (stopBtn) stopBtn.style.display = "inline-flex";
+      if (replayBtn) replayBtn.style.display = "inline-flex";
+      if (equalizer) {
+        equalizer.style.display = "flex";
+        equalizer.classList.remove("paused");
+      }
+      if (bubble) bubble.classList.add("speaking-active");
+
+      if (globalSpeakingBar) {
+        globalSpeakingBar.style.display = "flex";
+        if (speakingLangBadge) {
+          const displayLang = LANG_DISPLAY_NAMES[lang] || lang;
+          speakingLangBadge.textContent = speechQueue.length > 1
+            ? `${displayLang} (${currentQueueIndex + 1}/${speechQueue.length})`
+            : displayLang;
+        }
+        if (pauseResumeGlobalBtn) {
+          pauseResumeGlobalBtn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="4" width="4" height="16"></rect>
+              <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+            <span>Pause</span>
+          `;
+        }
+      }
+    };
+
+    audioElement.onended = () => {
+      if (!isSpeakingActive) return;
+      currentQueueIndex++;
+      if (currentQueueIndex < speechQueue.length) {
+        playNextSpeechChunk();
+      } else {
+        stopSpeaking();
+      }
+    };
+
+    audioElement.onerror = () => {
+      console.warn("Audio element error on chunk", currentQueueIndex);
+      currentQueueIndex++;
+      if (isSpeakingActive && currentQueueIndex < speechQueue.length) {
+        playNextSpeechChunk();
+      } else {
+        stopSpeaking();
+      }
+    };
+
+    audioElement.play().catch((e) => {
+      console.warn("Audio stream playback initiated:", e);
+    });
+    return;
+  }
+
+  const utterance = new SpeechSynthesisUtterance(chunkText);
+  utterance.lang = voice && voice.lang ? voice.lang : targetLocale;
+  if (voice) {
+    utterance.voice = voice;
+  }
   utterance.rate = 1.0;
   utterance.pitch = 1.0;
 
-  activeSpeakerData = {
-    text: cleanSpokenText,
-    lang,
-    playBtn: triggerBtn,
-    stopBtn,
-    replayBtn,
-    equalizer,
-    bubble,
-    isPaused: false
-  };
-  currentUtterance = utterance;
-
   utterance.onstart = () => {
+    startSpeechWatchdog();
+
     if (triggerBtn) {
       triggerBtn.classList.add("active-speaker");
       triggerBtn.innerHTML = `
@@ -1124,10 +1300,14 @@ function speakText(text, lang = "en", triggerBtn = null, bubble = null, stopBtn 
     }
     if (bubble) bubble.classList.add("speaking-active");
 
-    // Global speaking bar
     if (globalSpeakingBar) {
       globalSpeakingBar.style.display = "flex";
-      if (speakingLangBadge) speakingLangBadge.textContent = LANG_DISPLAY_NAMES[lang] || lang;
+      if (speakingLangBadge) {
+        const displayLang = LANG_DISPLAY_NAMES[lang] || lang;
+        speakingLangBadge.textContent = speechQueue.length > 1
+          ? `${displayLang} (${currentQueueIndex + 1}/${speechQueue.length})`
+          : displayLang;
+      }
       if (pauseResumeGlobalBtn) {
         pauseResumeGlobalBtn.innerHTML = `
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -1141,12 +1321,27 @@ function speakText(text, lang = "en", triggerBtn = null, bubble = null, stopBtn 
   };
 
   utterance.onend = () => {
-    resetActiveAudioUI();
+    if (!isSpeakingActive) return;
+    currentQueueIndex++;
+    if (currentQueueIndex < speechQueue.length) {
+      playNextSpeechChunk();
+    } else {
+      stopSpeaking();
+    }
   };
 
   utterance.onerror = (e) => {
-    console.warn("Speech synthesis error or interrupted:", e);
-    resetActiveAudioUI();
+    if (e.error !== "canceled" && e.error !== "interrupted") {
+      console.warn("Speech chunk error:", e);
+      currentQueueIndex++;
+      if (isSpeakingActive && currentQueueIndex < speechQueue.length) {
+        playNextSpeechChunk();
+      } else {
+        stopSpeaking();
+      }
+    } else {
+      stopSpeaking();
+    }
   };
 
   utterance.onpause = () => {
@@ -1193,7 +1388,51 @@ function speakText(text, lang = "en", triggerBtn = null, bubble = null, stopBtn 
     }
   };
 
+  currentUtterance = utterance;
   window.speechSynthesis.speak(utterance);
+}
+
+function speakText(text, lang = "en", triggerBtn = null, bubble = null, stopBtn = null, replayBtn = null, equalizer = null) {
+  if (!window.speechSynthesis) {
+    showToast("Audio synthesis is not supported in this browser.", "warning");
+    return;
+  }
+
+  // Interruption: Stop any previous playback immediately
+  stopSpeaking();
+
+  if (bubble) {
+    if (!triggerBtn) triggerBtn = bubble.querySelector(".voice-play-btn");
+    if (!stopBtn) stopBtn = bubble.querySelector(".voice-stop-btn");
+    if (!replayBtn) replayBtn = bubble.querySelector(".voice-replay-btn");
+    if (!equalizer) equalizer = bubble.querySelector(".bubble-speaking-equalizer");
+  }
+
+  const chunks = chunkSpokenText(text, 160);
+  if (chunks.length === 0) return;
+
+  const targetLocale = SPEECH_LOCALE_MAP[lang] || "en-IN";
+  const matchedVoice = findBestVoice(targetLocale, lang);
+
+  speechQueue = chunks;
+  currentQueueIndex = 0;
+  isSpeakingActive = true;
+
+  activeSpeakerData = {
+    fullText: text,
+    lang,
+    targetLocale,
+    voice: matchedVoice,
+    triggerBtn,
+    stopBtn,
+    replayBtn,
+    equalizer,
+    bubble,
+    isPaused: false
+  };
+
+  // Start continuous sequential playback of chunks
+  playNextSpeechChunk();
 }
 
 // ============================================================================
