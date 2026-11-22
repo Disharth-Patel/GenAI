@@ -13,7 +13,112 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="dark-theme">
-  <div class="app-container">
+  <!-- Standalone Authentication Dashboard (Opens First When Starting Website) -->
+  <div class="auth-landing-page" id="authLandingPage">
+    <div class="auth-landing-container">
+      <!-- Left Hero Overview -->
+      <div class="auth-landing-hero">
+        <div class="landing-gov-badge">
+          <span class="badge-dot"></span>
+          <span>Official Maharashtra Student Advisory Portal</span>
+        </div>
+        <div class="landing-brand-crest">
+          <div class="brand-crest large-crest">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+          </div>
+          <div>
+            <h1 class="landing-hero-title">महा-OBC AI Chatbot</h1>
+            <span class="landing-hero-sub">Department of Other Backward Bahujan Kalyan</span>
+          </div>
+        </div>
+        <p class="landing-hero-desc">
+          Grounded, multilingual voice and text AI assistance for Maharashtra Post-Matric Scholarships, Savitribai Phule Hostels, Swadhar Yojana, tuition fee waivers, and MahaDBT application rules.
+        </p>
+
+        <div class="landing-feature-grid">
+          <div class="landing-feature-item">
+            <span class="feat-icon">🌐</span>
+            <div>
+              <strong>10+ Indian Languages</strong>
+              <p>Fluent Marathi, Gujarati, Hindi, English, Tamil & Telugu</p>
+            </div>
+          </div>
+          <div class="landing-feature-item">
+            <span class="feat-icon">🎙️</span>
+            <div>
+              <strong>Continuous Voice-to-Voice</strong>
+              <p>Natural speech recognition & stream audio playback</p>
+            </div>
+          </div>
+          <div class="landing-feature-item">
+            <span class="feat-icon">🏛️</span>
+            <div>
+              <strong>100% Grounded RAG</strong>
+              <p>Verified against 118+ official Maharashtra schemes</p>
+            </div>
+          </div>
+          <div class="landing-feature-item">
+            <span class="feat-icon">⚡</span>
+            <div>
+              <strong>Local Open-Weight AI</strong>
+              <p>Runs on local Ollama Llama 3.2 · Zero API keys</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Login Card -->
+      <div class="auth-landing-card">
+        <div class="landing-card-header">
+          <div class="landing-crest-small">🏛️</div>
+          <h2>Authentication Portal</h2>
+          <p>Sign in to proceed to the AI assistant</p>
+        </div>
+
+        <div class="modal-tabs landing-tabs">
+          <button class="tab-btn active" id="landingTabLogin" data-mode="login">Sign In</button>
+          <button class="tab-btn" id="landingTabRegister" data-mode="register">Register Student</button>
+        </div>
+
+        <form id="landingAuthForm" class="auth-form">
+          <div class="form-group" id="landingUsernameGroup">
+            <label>Username or Email</label>
+            <input type="text" id="landingAuthUsername" class="form-input" required placeholder="admin or student@example.com" autocomplete="username">
+          </div>
+
+          <div class="form-group" id="landingEmailGroup" style="display: none;">
+            <label>Email Address</label>
+            <input type="email" id="landingAuthEmail" class="form-input" placeholder="student@example.com" autocomplete="email">
+          </div>
+
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="landingAuthPassword" class="form-input" required placeholder="••••••••" autocomplete="current-password">
+          </div>
+
+          <div class="auth-hint landing-auth-hint">
+            <strong>Default Credentials:</strong><br>
+            • Admin: <code>admin</code> / <code>Admin@123</code><br>
+            • Student: <code>student</code> / <code>Student@123</code>
+          </div>
+
+          <div class="auth-error-msg" id="landingAuthErrorMsg"></div>
+
+          <button type="submit" class="btn btn-primary btn-block landing-submit-btn" id="landingAuthSubmitBtn">
+            <span>Sign In & Proceed</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-container" id="appContainer" style="display: none;">
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
@@ -1439,6 +1544,6 @@
   <!-- Non-blocking Toast Notification Container -->
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="app.js?v=5.0.0"></script>
+  <script src="app.js?v=6.0.0"></script>
 </body>
 </html>
