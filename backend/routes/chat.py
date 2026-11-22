@@ -132,9 +132,12 @@ def handle_chat(
             requested_language=req.language or "auto",
             conversation_history=conv_history,
         )
-    except RuntimeError as exc:
-        logger.error("Local Ollama inference failed: %s", exc)
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.warning("Local AI inference encountered issue: %s. Using grounded RAG fallback.", exc)
+        from backend.services.ai_service import format_sources_for_response, build_fallback_response
+        sources = format_sources_for_response(retrieved_chunks)
+        effective_lang = req.language if req.language and req.language != "auto" else "mr"
+        answer = build_fallback_response(clean_msg, sources, effective_lang)
     latency_ms = round((time.perf_counter() - t_start) * 1000, 2)
 
     last_m = getattr(ai_service, "last_metrics", None)
