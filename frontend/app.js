@@ -222,10 +222,13 @@ document.addEventListener("DOMContentLoaded", () => {
   initTheme();
   updateUserUI();
   setupSpeechRecognition();
-  loadConversations();
   setupEventListeners();
   checkServerHealth();
   fetchModelRuntimeStatus();
+  enforceLoginGate();
+  if (authToken) {
+    loadConversations();
+  }
 });
 
 function setupEventListeners() {
@@ -303,7 +306,22 @@ function setupEventListeners() {
 
   // Auth Modal
   authTriggerBtn.addEventListener("click", openAuthModal);
-  closeAuthModalBtn.addEventListener("click", () => authModal.classList.remove("open"));
+  closeAuthModalBtn.addEventListener("click", () => {
+    if (!authToken || !currentUser) {
+      showToast("Please sign in or register to access the chatbot.", "info");
+      return;
+    }
+    authModal.classList.remove("open");
+  });
+  authModal.addEventListener("click", (e) => {
+    if (e.target === authModal) {
+      if (!authToken || !currentUser) {
+        showToast("Please sign in or register to access the chatbot.", "info");
+        return;
+      }
+      authModal.classList.remove("open");
+    }
+  });
   authTabLogin.addEventListener("click", () => setAuthMode("login"));
   authTabRegister.addEventListener("click", () => setAuthMode("register"));
   authForm.addEventListener("submit", handleAuthSubmit);
@@ -477,6 +495,12 @@ async function checkServerHealth() {
 // Chat Messaging & RAG
 // ============================================================================
 async function sendMessage() {
+  if (!authToken || !currentUser) {
+    showToast("Please sign in or register to send messages and use the AI assistant.", "warning");
+    enforceLoginGate();
+    return;
+  }
+
   const text = chatInput.value.trim();
   if (!text) return;
 
@@ -1578,6 +1602,19 @@ function updateUserUI() {
   }
 }
 
+function enforceLoginGate() {
+  if (!authToken || !currentUser) {
+    setAuthMode("login");
+    authModal.classList.add("open");
+    authModal.classList.add("auth-gate");
+    if (closeAuthModalBtn) closeAuthModalBtn.style.display = "none";
+  } else {
+    authModal.classList.remove("open");
+    authModal.classList.remove("auth-gate");
+    if (closeAuthModalBtn) closeAuthModalBtn.style.display = "inline-flex";
+  }
+}
+
 function openAuthModal() {
   if (currentUser) {
     // If signed in, trigger sign out confirmation
@@ -1586,8 +1623,12 @@ function openAuthModal() {
       localStorage.removeItem("voice_chatbot_user");
       authToken = null;
       currentUser = null;
+      currentConversationId = null;
+      if (messagesContainer) messagesContainer.innerHTML = "";
+      if (welcomeHero) welcomeHero.style.display = "flex";
       updateUserUI();
       loadConversations();
+      enforceLoginGate();
     }
   } else {
     setAuthMode("login");
@@ -1641,9 +1682,10 @@ async function handleAuthSubmit(e) {
     localStorage.setItem("voice_chatbot_user", JSON.stringify(currentUser));
 
     updateUserUI();
+    enforceLoginGate();
     loadConversations();
-    authModal.classList.remove("open");
     authForm.reset();
+    showToast(`Welcome back, ${currentUser.username}! You are signed in as ${currentUser.role}.`, "success", 3500);
   } catch (err) {
     authErrorMsg.textContent = err.message;
     authErrorMsg.style.display = "block";
