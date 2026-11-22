@@ -18,6 +18,7 @@ class SynthesizeRequest(BaseModel):
 
 
 @router.get("/stream")
+@router.get("/stream/")
 def stream_speech_audio(text: str = Query(..., min_length=1), language: Optional[str] = "mr"):
     """
     Stream native browser-based speaking audio for any text in Marathi, Gujarati, Hindi, English, etc.
