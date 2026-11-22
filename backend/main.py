@@ -20,6 +20,10 @@ from backend.routes.evaluation import router as evaluation_router
 from backend.services.retrieval_service import seed_knowledge_from_csv
 from backend.models import KnowledgeEntry
 
+# Resolve frontend directory once at module load
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_FRONTEND_DIR = os.path.join(_BASE_DIR, "frontend")
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -66,6 +70,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Serve favicon.ico directly (prevents 404 spam in logs)
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    favicon_path = os.path.join(_FRONTEND_DIR, "favicon.ico")
+    if os.path.isfile(favicon_path):
+        return FileResponse(favicon_path, media_type="image/x-icon")
+    return FileResponse(os.path.join(_FRONTEND_DIR, "favicon.svg"), media_type="image/svg+xml")
+
+
 # Public Health Endpoint
 @app.get("/health", tags=["health"])
 def health_check():
@@ -94,6 +107,5 @@ app.include_router(knowledge_router)
 app.include_router(evaluation_router)
 
 # Mount frontend directory at root if it exists (placed after all API routers)
-frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
-if os.path.isdir(frontend_path):
-    app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
+if os.path.isdir(_FRONTEND_DIR):
+    app.mount("/", StaticFiles(directory=_FRONTEND_DIR, html=True), name="frontend")

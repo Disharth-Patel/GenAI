@@ -78,7 +78,7 @@ Build a working application that supports:
 
 4. **Start the Application**:
    ```powershell
-   python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+   python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
    ```
 
 5. **Access the Application**:
@@ -768,27 +768,70 @@ increase latency.
 
 ## 12. Run and verify
 
-From the project root, activate the virtual environment and run:
+### Step-by-Step Commands to Run the Project
 
-``` powershell
-uvicorn backend.main:app --reload
+#### 1. Verify Ollama Runtime & Model
+Ensure Ollama is running and has the required model installed:
+```cmd
+ollama list
+```
+*(If `llama3.2:latest` is missing, pull it with `ollama pull llama3.2:latest`)*
+
+#### 2. Start the Voice AI Chatbot (Backend + Embedded Frontend)
+From the project root (`d:\GenAI`):
+
+**Command Prompt (cmd):**
+```cmd
+cd /d d:\GenAI
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload-dir backend
 ```
 
-Then:
+**PowerShell:**
+```powershell
+# (If not already in d:\GenAI, run: cd d:\GenAI)
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload-dir backend
+```
+*(Alternative short command: `uvicorn backend.main:app --reload-dir backend`)*
 
-1.  Open `http://127.0.0.1:8000/health`.
-2.  Open `http://127.0.0.1:8000/docs`.
-3.  Test text chat.
-4.  Open the frontend on localhost.
-5.  Test microphone permission and voice-to-text.
-6.  Test speaking an AI response.
-7.  Test a complete voice-to-voice turn.
-8.  Sign in as an administrator and add a knowledge entry.
-9.  Ask a question that requires that entry.
-10. Edit and delete the entry and verify subsequent retrieval behavior.
-11. Sign in as a student and confirm that admin functions are
-    inaccessible.
-12. Run `pytest` from the project root.
+#### 3. Access URLs
+- **Web App & Chat UI**: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+- **Interactive Swagger API Docs**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+- **Health Check Endpoint**: [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
+- **LLM Status Endpoint**: [http://127.0.0.1:8000/api/llm/status](http://127.0.0.1:8000/api/llm/status)
+
+#### 4. Default Login Credentials
+- **Administrator**: `admin` / `Admin@123` (Access to Knowledge Base Management, Document Uploads, Benchmark Suite)
+- **Student**: `student` / `Student@123` (Or register any new student account via the UI)
+
+#### 5. (Optional) Running the React Sub-project (`new-obc-ai-app`)
+If working with the separate React + Vite application:
+- **Backend (Terminal 1)**:
+  ```cmd
+  cd /d d:\GenAI\new-obc-ai-app\backend
+  uvicorn app.main:app --reload --port 8000
+  ```
+- **Frontend (Terminal 2)**:
+  ```cmd
+  cd /d d:\GenAI\new-obc-ai-app\frontend
+  npm run dev
+  ```
+
+---
+
+### Verification Checklist
+
+Once the server is running:
+
+1.  Open `http://127.0.0.1:8000/health` and verify `status: ok` and indexed knowledge count.
+2.  Open `http://127.0.0.1:8000/` in your browser.
+3.  Test text chat in English and regional languages (Hindi, Marathi, Gujarati, etc.).
+4.  Test microphone permissions and voice-to-text (STT).
+5.  Test text-to-speech (TTS) audio playback and per-message audio controls.
+6.  Test a complete voice-to-voice turn.
+7.  Sign in as `admin` / `Admin@123` and test adding/editing knowledge entries.
+8.  Ask a question requiring newly added knowledge to verify real-time retrieval.
+9.  Sign in as `student` / `Student@123` to confirm role permissions are enforced.
+10. Run tests: `python -m pytest tests/ -v`
 
 ## 13. Definition of done
 

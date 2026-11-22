@@ -22,7 +22,37 @@ class OllamaService:
         self.base_url = raw_url.replace("localhost", "127.0.0.1")
         self.model_name = os.getenv("OLLAMA_MODEL", "llama3.2:latest").strip()
         self.timeout = float(os.getenv("OLLAMA_TIMEOUT", "120.0"))
+
+        # Persistent HTTP session with keep-alive for lower per-request overhead
         self.session = requests.Session()
+        self.session.headers.update({"Connection": "keep-alive"})
+
+        # Pre-warm the model on startup so the first user request isn't slow
+        self._warmup_done = False
+        self._try_warmup()
+
+    def _try_warmup(self):
+        """
+        Send a minimal dummy request so Ollama loads the model weights into RAM
+        before the first real user query arrives. This eliminates the 'cold start'
+        delay (usually 2-10 seconds for a 3B model).
+        """
+        try:
+            payload = {
+                "model": self.model_name,
+                "messages": [{"role": "user", "content": "hi"}],
+                "stream": False,
+                "options": {"num_predict": 1, "num_ctx": 128, "temperature": 0.0},
+            }
+            self.session.post(
+                f"{self.base_url}/api/chat",
+                json=payload,
+                timeout=30.0,
+            )
+            self._warmup_done = True
+            logger.info(f"Model '{self.model_name}' warm-up complete — ready for fast inference.")
+        except Exception as e:
+            logger.warning(f"Model warm-up skipped (Ollama may not be running yet): {e}")
 
     def check_health(self) -> Dict[str, Any]:
         """
@@ -123,9 +153,9 @@ class OllamaService:
         )
         messages.append({"role": "system", "content": system_content})
 
-        # Append recent conversation history
+        # Append recent conversation history (last 4 turns for speed)
         if conversation_history:
-            for h in conversation_history[-6:]:
+            for h in conversation_history[-4:]:
                 role = "user" if h.get("role") == "user" else "assistant"
                 text = h.get("text", "").strip()
                 if text:
@@ -140,9 +170,13 @@ class OllamaService:
             "stream": False,
             "options": {
                 "temperature": temperature,
-                "top_p": 0.9,
+                "top_p": 0.85,
+                "top_k": 20,              # Narrows token sampling → faster + more focused
                 "num_predict": max_tokens,
-                "num_ctx": 2048,
+                "num_ctx": 1536,          # Smaller context window → less memory, faster decode
+                "num_thread": 0,          # 0 = let Ollama auto-detect optimal CPU thread count
+                "repeat_penalty": 1.1,    # Reduce repetitive output → shorter responses
+                "stop": ["\n\n\n", "---", "###"],  # Early stop on natural boundaries
             }
         }
 
