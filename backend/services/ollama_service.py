@@ -164,19 +164,28 @@ class OllamaService:
         # Append current user prompt
         messages.append({"role": "user", "content": user_message})
 
+        # Merge live admin-configured overrides (set via /api/evaluation/admin/model-config)
+        admin_overrides = getattr(self, "_admin_overrides", {})
+        effective_temperature = admin_overrides.get("temperature", temperature)
+        effective_top_p = admin_overrides.get("top_p", 0.85)
+        effective_top_k = admin_overrides.get("top_k", 20)
+        effective_num_predict = admin_overrides.get("num_predict", max_tokens)
+        effective_num_ctx = admin_overrides.get("num_ctx", 1536)
+        effective_repeat_penalty = admin_overrides.get("repeat_penalty", 1.1)
+
         payload = {
             "model": self.model_name,
             "messages": messages,
             "stream": False,
             "options": {
-                "temperature": temperature,
-                "top_p": 0.85,
-                "top_k": 20,              # Narrows token sampling → faster + more focused
-                "num_predict": max_tokens,
-                "num_ctx": 1536,          # Smaller context window → less memory, faster decode
-                "num_thread": 0,          # 0 = let Ollama auto-detect optimal CPU thread count
-                "repeat_penalty": 1.1,    # Reduce repetitive output → shorter responses
-                "stop": ["\n\n\n", "---", "###"],  # Early stop on natural boundaries
+                "temperature": effective_temperature,
+                "top_p": effective_top_p,
+                "top_k": effective_top_k,
+                "num_predict": effective_num_predict,
+                "num_ctx": effective_num_ctx,
+                "num_thread": 0,
+                "repeat_penalty": effective_repeat_penalty,
+                "stop": ["\n\n\n", "---", "###"],
             }
         }
 

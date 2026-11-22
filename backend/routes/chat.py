@@ -13,6 +13,7 @@ from backend.models import User, Conversation, Message
 from backend.routes.auth import get_current_user, get_optional_user
 from backend.services.retrieval_service import retriever
 from backend.services.ai_service import ai_service
+from backend.services.evaluation_service import evaluation_service
 
 logger = logging.getLogger("chat_route")
 
@@ -190,6 +191,25 @@ def handle_chat(
     from datetime import datetime, timezone
     conversation.updated_at = datetime.now(timezone.utc)
     db.commit()
+
+    # 6. Live Chat Evaluation & Telemetry Recording
+    try:
+        live_eval = evaluation_service.record_live_chat_evaluation(
+            db=db,
+            user_message=clean_msg,
+            assistant_response=answer,
+            sources=sources,
+            latency_ms=latency_ms,
+            prompt_tokens=input_tokens_est,
+            completion_tokens=output_tokens_est,
+            tps=tps,
+            language=effective_lang,
+            user_id=conversation.user_id
+        )
+        if live_eval:
+            metrics.update(live_eval)
+    except Exception as eval_err:
+        logger.warning(f"Live evaluation recording skipped: {eval_err}")
 
     return ChatResponse(
         answer=answer,
