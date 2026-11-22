@@ -8,33 +8,12 @@ const API_BASE = (window.location.origin && window.location.origin !== "null" &&
 
 // State
 let currentConversationId = null;
-let authToken = sessionStorage.getItem("voice_chatbot_token") || null;
-let currentUser = JSON.parse(sessionStorage.getItem("voice_chatbot_user") || "null");
-
-// Ensure persistent auto-login is cleared so opening the website always opens the login credentials first
-try {
-  localStorage.removeItem("voice_chatbot_token");
-  localStorage.removeItem("voice_chatbot_user");
-} catch (e) {}
-
+let authToken = localStorage.getItem("voice_chatbot_token") || null;
+let currentUser = JSON.parse(localStorage.getItem("voice_chatbot_user") || "null");
 let speechRecognition = null;
 let isRecording = false;
 let currentUtterance = null;
 let activeSpeakerData = null; // { text, lang, btn, bubble, isPaused }
-
-// Authentication Landing Page Elements
-const authLandingPage = document.getElementById("authLandingPage");
-const appContainer = document.getElementById("appContainer");
-const landingTabLogin = document.getElementById("landingTabLogin");
-const landingTabRegister = document.getElementById("landingTabRegister");
-const landingAuthForm = document.getElementById("landingAuthForm");
-const landingAuthUsername = document.getElementById("landingAuthUsername");
-const landingAuthEmail = document.getElementById("landingAuthEmail");
-const landingEmailGroup = document.getElementById("landingEmailGroup");
-const landingAuthPassword = document.getElementById("landingAuthPassword");
-const landingAuthErrorMsg = document.getElementById("landingAuthErrorMsg");
-const landingAuthSubmitBtn = document.getElementById("landingAuthSubmitBtn");
-let landingAuthMode = "login";
 
 // DOM Elements
 const sidebar = document.getElementById("sidebar");
@@ -237,24 +216,16 @@ async function fetchModelRuntimeStatus() {
 }
 
 // ============================================================================
-// Initialization & Authentication Dashboard First Enforcer
+// Initialization
 // ============================================================================
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
+  updateUserUI();
   setupSpeechRecognition();
+  loadConversations();
   setupEventListeners();
-  setupLandingAuthListeners();
   checkServerHealth();
   fetchModelRuntimeStatus();
-
-  // Enforce Authentication Dashboard First on Startup
-  if (!authToken || !currentUser) {
-    showAuthLandingPage();
-  } else {
-    updateUserUI();
-    showChatWorkspace();
-    loadConversations();
-  }
 });
 
 function setupEventListeners() {
@@ -332,22 +303,7 @@ function setupEventListeners() {
 
   // Auth Modal
   authTriggerBtn.addEventListener("click", openAuthModal);
-  closeAuthModalBtn.addEventListener("click", () => {
-    if (!authToken || !currentUser) {
-      showToast("Please sign in or register to access the chatbot.", "info");
-      return;
-    }
-    authModal.classList.remove("open");
-  });
-  authModal.addEventListener("click", (e) => {
-    if (e.target === authModal) {
-      if (!authToken || !currentUser) {
-        showToast("Please sign in or register to access the chatbot.", "info");
-        return;
-      }
-      authModal.classList.remove("open");
-    }
-  });
+  closeAuthModalBtn.addEventListener("click", () => authModal.classList.remove("open"));
   authTabLogin.addEventListener("click", () => setAuthMode("login"));
   authTabRegister.addEventListener("click", () => setAuthMode("register"));
   authForm.addEventListener("submit", handleAuthSubmit);
@@ -521,12 +477,6 @@ async function checkServerHealth() {
 // Chat Messaging & RAG
 // ============================================================================
 async function sendMessage() {
-  if (!authToken || !currentUser) {
-    showToast("Please sign in or register to send messages and use the AI assistant.", "warning");
-    enforceLoginGate();
-    return;
-  }
-
   const text = chatInput.value.trim();
   if (!text) return;
 
@@ -1628,115 +1578,20 @@ function updateUserUI() {
   }
 }
 
-function showAuthLandingPage() {
-  if (authLandingPage) authLandingPage.style.display = "flex";
-  if (appContainer) appContainer.style.display = "none";
-  setLandingAuthMode("login");
-}
-
-function showChatWorkspace() {
-  if (authLandingPage) authLandingPage.style.display = "none";
-  if (appContainer) appContainer.style.display = "flex";
-}
-
-function setLandingAuthMode(mode) {
-  landingAuthMode = mode;
-  if (landingAuthErrorMsg) landingAuthErrorMsg.style.display = "none";
-  if (mode === "login") {
-    landingTabLogin?.classList.add("active");
-    landingTabRegister?.classList.remove("active");
-    if (landingAuthSubmitBtn) {
-      landingAuthSubmitBtn.innerHTML = `
-        <span>Sign In & Proceed</span>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="5" y1="12" x2="19" y2="12"></line>
-          <polyline points="12 5 19 12 12 19"></polyline>
-        </svg>
-      `;
-    }
-    if (landingEmailGroup) landingEmailGroup.style.display = "none";
-  } else {
-    landingTabLogin?.classList.remove("active");
-    landingTabRegister?.classList.add("active");
-    if (landingAuthSubmitBtn) {
-      landingAuthSubmitBtn.innerHTML = `
-        <span>Register Student & Proceed</span>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="5" y1="12" x2="19" y2="12"></line>
-          <polyline points="12 5 19 12 12 19"></polyline>
-        </svg>
-      `;
-    }
-    if (landingEmailGroup) landingEmailGroup.style.display = "block";
-  }
-}
-
-async function handleLandingAuthSubmit(e) {
-  e.preventDefault();
-  if (landingAuthErrorMsg) landingAuthErrorMsg.style.display = "none";
-  const username = landingAuthUsername.value.trim();
-  const password = landingAuthPassword.value;
-  const email = landingAuthEmail?.value?.trim() || "";
-
-  const endpoint = landingAuthMode === "login" ? "/api/auth/login" : "/api/auth/register";
-  const payload = landingAuthMode === "login"
-    ? { username_or_email: username, password }
-    : { username, email, password };
-
-  try {
-    const res = await fetch(`${API_BASE}${endpoint}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Authentication failed");
-
-    authToken = data.access_token;
-    currentUser = data.user;
-    sessionStorage.setItem("voice_chatbot_token", authToken);
-    sessionStorage.setItem("voice_chatbot_user", JSON.stringify(currentUser));
-
-    updateUserUI();
-    showChatWorkspace();
-    loadConversations();
-    landingAuthForm?.reset();
-    showToast(`Welcome, ${currentUser.username}! You are signed in as ${currentUser.role}.`, "success", 3500);
-  } catch (err) {
-    if (landingAuthErrorMsg) {
-      landingAuthErrorMsg.textContent = err.message;
-      landingAuthErrorMsg.style.display = "block";
-    }
-  }
-}
-
-function setupLandingAuthListeners() {
-  landingTabLogin?.addEventListener("click", () => setLandingAuthMode("login"));
-  landingTabRegister?.addEventListener("click", () => setLandingAuthMode("register"));
-  landingAuthForm?.addEventListener("submit", handleLandingAuthSubmit);
-}
-
 function openAuthModal() {
   if (currentUser) {
     // If signed in, trigger sign out confirmation
     if (confirm(`Signed in as ${currentUser.username} (${currentUser.role}). Sign out?`)) {
-      sessionStorage.removeItem("voice_chatbot_token");
-      sessionStorage.removeItem("voice_chatbot_user");
-      try {
-        localStorage.removeItem("voice_chatbot_token");
-        localStorage.removeItem("voice_chatbot_user");
-      } catch (e) {}
+      localStorage.removeItem("voice_chatbot_token");
+      localStorage.removeItem("voice_chatbot_user");
       authToken = null;
       currentUser = null;
-      currentConversationId = null;
-      if (messagesContainer) messagesContainer.innerHTML = "";
-      if (welcomeHero) welcomeHero.style.display = "flex";
       updateUserUI();
-      showAuthLandingPage();
+      loadConversations();
     }
   } else {
-    showAuthLandingPage();
+    setAuthMode("login");
+    authModal.classList.add("open");
   }
 }
 
@@ -1786,10 +1641,9 @@ async function handleAuthSubmit(e) {
     localStorage.setItem("voice_chatbot_user", JSON.stringify(currentUser));
 
     updateUserUI();
-    enforceLoginGate();
     loadConversations();
+    authModal.classList.remove("open");
     authForm.reset();
-    showToast(`Welcome back, ${currentUser.username}! You are signed in as ${currentUser.role}.`, "success", 3500);
   } catch (err) {
     authErrorMsg.textContent = err.message;
     authErrorMsg.style.display = "block";
