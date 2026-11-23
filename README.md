@@ -118,6 +118,10 @@ python -m pytest tests/ -v
   - Live chat telemetry automatically tracks latency percentiles, Time to First Token (TTFT), tokens per second (TPS), token usage, and context window utilization.
   - Automated 16-case benchmark runner, 4-preset parameter sweeps (Deterministic, Balanced, Creative, Compact), and RAG vs. No-RAG ablation analysis.
   - Real-time grounded NLP quality metrics: Exact Match (EM), Token F1, ROUGE-L, BLEU-4, Cosine Similarity, Factual Faithfulness, Language Match Accuracy, and Hallucination Risk.
+  - **Grounding Fidelity & Hallucination Confusion Matrix**:
+    - Comprehensive 2x2 binary evaluation matrix classifying True Positives (Grounded & Accurate), False Positives (Hallucinated Claims / Phantom URLs), False Negatives (Information Omissions / Under-retrieval), and True Negatives (Domain Boundary Abstention on out-of-scope queries).
+    - Mathematical derivations: Grounding Precision, Information Recall, Grounding F1-Score, True Negative Specificity, and Hallucination Risk Rate.
+    - Category-level (Scholarship, Hostel, Foreign Studies, etc.) and Language-level (Marathi, Hindi, Gujarati, English, Hinglish) Grounding Breakdown with interactive test case filtering.
 - **Professional UI/UX Redesign**:
   - Light / Dark theme toggle persisted in `localStorage` with cohesive color tokens.
   - Native Google Fonts linked for all major Indian scripts (`Noto Sans Devanagari`, `Gujarati`, `Tamil`, `Telugu`, `Bengali`, `Kannada`, `Malayalam`, `Gurmukhi`).
@@ -640,6 +644,51 @@ Create a small test dataset of real, non-sensitive questions and verified answer
 
 Keep a regression test set and rerun it when changing prompts, models, embeddings, chunking, or speech providers. Do not rely only on a few successful manual demos.
 
+#### Grounding Fidelity & Hallucination Confusion Matrix Framework
+
+To objectively quantify factual reliability and hallucination risks, the evaluation engine formulates RAG generation as a binary grounding verification task across in-domain factual inquiries and out-of-domain negative controls:
+
+```
+                          ┌───────────────────────────┬───────────────────────────┐
+                          │   PREDICTED: GROUNDED     │  PREDICTED: HALLUCINATED  │
+┌─────────────────────────┼───────────────────────────┼───────────────────────────┤
+│ ACTUAL: IN-DOMAIN       │    True Positive (TP)     │    False Positive (FP)    │
+│ Factual Inquiry         │    Grounded & Verified    │    Hallucinated Claim     │
+│ (e.g. MahaDBT Rules)    │  Factual context support  │ Unsupported links/figures │
+├─────────────────────────┼───────────────────────────┼───────────────────────────┤
+│ ACTUAL: OUT-OF-DOMAIN   │    False Negative (FN)    │    True Negative (TN)     │
+│ Unanswerable / Negative │   Information Omission    │    Correct Abstention     │
+│ (e.g. TC-13 RTO query)  │   Under-retrieval/refusal │   Safe boundary refusal   │
+└─────────────────────────┴───────────────────────────┴───────────────────────────┘
+```
+
+##### Matrix Quadrant Definitions:
+1. **True Positive (TP)**: In-domain query where verified Maharashtra OBC scheme facts exist, and the LLM faithfully generated a grounded response with verified context support ($\text{Faithfulness} \ge 0.55$, $\text{Hallucination} = \text{False}$).
+2. **False Positive (FP - Hallucination)**: The LLM generated fabricated external URLs, non-existent eligibility criteria, distorted monetary stipends, or unsupported claims not present in the retrieved knowledge base.
+3. **True Negative (TN - Correct Abstention)**: Out-of-domain or unanswerable query (e.g. TC-13 vehicle driving licenses) where the model correctly refused/abstained without fabricating fictitious schemes or guidelines.
+4. **False Negative (FN - Information Omission)**: In-domain query where facts existed in the knowledge base, but the model either omitted required details, produced an evasive non-answer, or under-retrieved context.
+
+##### Mathematical Derivations:
+$$\text{Grounding Precision} = \frac{\text{TP}}{\text{TP} + \text{FP}}$$
+
+$$\text{Information Recall} = \frac{\text{TP}}{\text{TP} + \text{FN}}$$
+
+$$\text{True Negative Specificity} = \frac{\text{TN}}{\text{TN} + \text{FP}}$$
+
+$$\text{Grounding } F_1\text{-Score} = \frac{2 \times \text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}$$
+
+$$\text{Hallucination Rate} = \frac{\text{FP}}{\text{TP} + \text{FP}}$$
+
+$$\text{Overall Classification Accuracy} = \frac{\text{TP} + \text{TN}}{\text{Total Cases}}$$
+
+##### UI & API Access:
+- **UI Studio**: Available in the Admin Dashboard under **LLM Benchmark Studio** $\rightarrow$ **Quality Evaluation** tab, featuring interactive 2x2 matrix tiles, percentage heatmaps, category-level breakdown bars, and classification filters in the Test Case Inspector.
+- **Admin Modal**: Executive Confusion Matrix summary strip with live TP/FP/FN/TN counters and real-time Precision/Recall/Hallucination rates.
+- **REST Endpoints**:
+  - `GET /api/evaluation/runs/{run_id}/confusion-matrix`
+  - `GET /api/evaluation/confusion-matrix` (latest / baseline overview)
+  - `GET /api/evaluation/admin/usage-stats` (includes confusion matrix in admin usage payload)
+
 ### Step 7 — Implement safety and access control
 
 Authenticate users, enforce authorization on the backend, validate files and inputs, limit upload size and request rate, keep secrets out of the frontend, and protect conversation history. Treat uploaded documents and retrieved text as untrusted content. Do not send confidential student information to an external provider unless its privacy terms and institutional rules allow it.
@@ -711,6 +760,10 @@ Run automated tests, configure production environment variables, use HTTPS, appl
                                                 knowledge entry   
                                                 and invalidate    
                                                 its chunks        
+
+  `GET`             `/api/evaluation/confusion-matrix` Grounding confusion matrix & hallucination stats Public/Admin
+
+  `GET`             `/api/evaluation/runs/{id}/confusion-matrix` Run-specific confusion matrix Admin
   ---------------------------------------------------------------------------------
 
 The API contract can evolve, but keep endpoint behavior consistent and

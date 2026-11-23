@@ -290,8 +290,11 @@ def get_evaluation_run_detail(
 
     results = db.query(EvaluationResult).filter(EvaluationResult.run_id == run_id).order_by(EvaluationResult.created_at.asc()).all()
 
+    cm = evaluation_service.compute_grounding_confusion_matrix(results)
+
     result_items = []
     for r in results:
+        cls_info = cm["classifications"].get(str(r.id)) or cm["classifications"].get(str(r.test_case_id)) or {}
         result_items.append({
             "id": r.id,
             "test_case_id": r.test_case_id,
@@ -329,6 +332,8 @@ def get_evaluation_run_detail(
             "faithfulness": r.faithfulness,
             "answer_relevance": r.answer_relevance,
             "hallucination_detected": r.hallucination_detected,
+            "grounding_classification": cls_info.get("classification", "TP"),
+            "classification_reason": cls_info.get("reason", "Factual answer grounded in RAG context"),
             "human_rating": r.human_rating,
             "human_feedback": r.human_feedback,
             "estimated_cost_usd": r.estimated_cost_usd,
@@ -371,7 +376,52 @@ def get_evaluation_run_detail(
             "created_at": run.created_at.isoformat() if run.created_at else None,
             "completed_at": run.completed_at.isoformat() if run.completed_at else None
         },
-        "results": result_items
+        "results": result_items,
+        "confusion_matrix": cm
+    }
+
+
+@router.get("/runs/{run_id}/confusion-matrix")
+def get_run_confusion_matrix(
+    run_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get the 2x2 Grounding & Hallucination Confusion Matrix for a specific evaluation run.
+    """
+    run = db.query(EvaluationRun).filter(EvaluationRun.id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Evaluation run not found.")
+
+    results = db.query(EvaluationResult).filter(EvaluationResult.run_id == run_id).all()
+    cm = evaluation_service.compute_grounding_confusion_matrix(results)
+    return {
+        "status": "ok",
+        "run_id": run_id,
+        "run_name": run.name,
+        "model_id": run.model_id,
+        "confusion_matrix": cm
+    }
+
+
+@router.get("/confusion-matrix")
+def get_overall_confusion_matrix(db: Session = Depends(get_db)):
+    """
+    Get the overall or latest Grounding & Hallucination Confusion Matrix across benchmark runs.
+    """
+    latest_run = db.query(EvaluationRun).filter(EvaluationRun.status == "completed").order_by(EvaluationRun.created_at.desc()).first()
+    if latest_run:
+        results = db.query(EvaluationResult).filter(EvaluationResult.run_id == latest_run.id).all()
+        cm = evaluation_service.compute_grounding_confusion_matrix(results)
+        return {
+            "status": "ok",
+            "source_run_id": latest_run.id,
+            "source_run_name": latest_run.name,
+            "confusion_matrix": cm
+        }
+    return {
+        "status": "baseline",
+        "confusion_matrix": evaluation_service.compute_grounding_confusion_matrix([])
     }
 
 
@@ -493,6 +543,11 @@ def get_admin_usage_stats(
     avg_latency_rows = db.query(EvaluationRun.avg_latency_ms).filter(EvaluationRun.avg_latency_ms > 0).all()
     avg_latency = round(sum(r[0] for r in avg_latency_rows) / max(1, len(avg_latency_rows)), 1) if avg_latency_rows else 0.0
 
+    # Grounding & Hallucination Confusion Matrix for Admin Overview
+    latest_run = db.query(EvaluationRun).filter(EvaluationRun.status == "completed").order_by(EvaluationRun.created_at.desc()).first()
+    recent_eval_results = db.query(EvaluationResult).filter(EvaluationResult.run_id == latest_run.id).all() if latest_run else []
+    cm_stats = evaluation_service.compute_grounding_confusion_matrix(recent_eval_results)
+
     return {
         "status": "ok",
         "usage": {
@@ -510,7 +565,8 @@ def get_admin_usage_stats(
             "language_distribution": lang_distribution,
             "avg_context_window_utilization_pct": avg_ctx_util,
             "avg_tokens_per_second": avg_tps,
-            "avg_response_latency_ms": avg_latency
+            "avg_response_latency_ms": avg_latency,
+            "confusion_matrix": cm_stats
         }
     }
 

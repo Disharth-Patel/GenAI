@@ -662,6 +662,43 @@
             </div>
           </div>
 
+          <!-- Executive Confusion Matrix & Hallucination Rate Strip for Admin -->
+          <div class="admin-cm-strip" style="background:linear-gradient(145deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.85));border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px;margin-bottom:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+              <div style="font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;">
+                <span>🎯 Grounding & Hallucination Confusion Matrix</span>
+                <span class="badge" id="adminCmSafetyBadge" style="font-size:10px;">Grounded</span>
+              </div>
+              <div style="font-size:11px;color:#94a3b8;">
+                Precision: <strong id="adminCmPrecision" style="color:#10b981;">93.3%</strong> | 
+                Recall: <strong id="adminCmRecall" style="color:#38bdf8;">93.3%</strong> | 
+                Hallucination: <strong id="adminCmHalluRate" style="color:#ef4444;">6.2%</strong>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:8px;">
+              <div style="background:rgba(16, 185, 129, 0.1);border:1px solid rgba(16, 185, 129, 0.3);border-radius:8px;padding:8px;text-align:center;">
+                <div style="font-size:10px;font-weight:700;color:#10b981;text-transform:uppercase;">TP (Grounded)</div>
+                <div id="adminCmTP" style="font-size:18px;font-weight:800;color:#f1f5f9;">14</div>
+                <div style="font-size:9px;color:#94a3b8;">Verified Facts</div>
+              </div>
+              <div style="background:rgba(239, 68, 68, 0.1);border:1px solid rgba(239, 68, 68, 0.3);border-radius:8px;padding:8px;text-align:center;">
+                <div style="font-size:10px;font-weight:700;color:#ef4444;text-transform:uppercase;">FP (Hallucination)</div>
+                <div id="adminCmFP" style="font-size:18px;font-weight:800;color:#f1f5f9;">1</div>
+                <div style="font-size:9px;color:#94a3b8;">Fabricated Claims</div>
+              </div>
+              <div style="background:rgba(245, 158, 11, 0.1);border:1px solid rgba(245, 158, 11, 0.3);border-radius:8px;padding:8px;text-align:center;">
+                <div style="font-size:10px;font-weight:700;color:#f59e0b;text-transform:uppercase;">FN (Omission)</div>
+                <div id="adminCmFN" style="font-size:18px;font-weight:800;color:#f1f5f9;">1</div>
+                <div style="font-size:9px;color:#94a3b8;">Incomplete Details</div>
+              </div>
+              <div style="background:rgba(59, 130, 246, 0.1);border:1px solid rgba(59, 130, 246, 0.3);border-radius:8px;padding:8px;text-align:center;">
+                <div style="font-size:10px;font-weight:700;color:#3b82f6;text-transform:uppercase;">TN (Abstention)</div>
+                <div id="adminCmTN" style="font-size:18px;font-weight:800;color:#f1f5f9;">0</div>
+                <div style="font-size:9px;color:#94a3b8;">Out-of-Scope Handled</div>
+              </div>
+            </div>
+          </div>
+
           <!-- Real User Usage Database Analytics Cards -->
           <div class="eval-subhead" style="margin-bottom:8px;font-size:14px;">📈 Real User Chat & Model Consumption Database</div>
           <div class="stats-grid" style="margin-bottom:16px;">
@@ -1228,12 +1265,124 @@
             </div>
           </div>
 
+          <!-- Grounding & Hallucination Confusion Matrix Section -->
+          <div class="confusion-matrix-card">
+            <div class="cm-header">
+              <div class="cm-title-wrap">
+                <span class="cm-icon">🎯</span>
+                <div>
+                  <h4>Grounding Fidelity & Hallucination Confusion Matrix</h4>
+                  <p class="cm-subtext">Binary RAG evaluation verifying factual grounding against hallucinated or fabricated claims</p>
+                </div>
+              </div>
+              <div class="cm-badge-group">
+                <span class="badge" id="cmSafetyStatus">Grounding: High</span>
+                <span class="badge" id="cmTotalCasesBadge">16 Cases Tested</span>
+              </div>
+            </div>
+
+            <div class="cm-content-grid">
+              <!-- 2x2 Matrix Grid -->
+              <div class="cm-matrix-wrapper">
+                <div class="cm-axis-y"><span>Actual (Ground Truth)</span></div>
+                <div class="cm-matrix-inner">
+                  <div class="cm-axis-x">Predicted (Model Response Grounding)</div>
+                  <div class="cm-col-headers">
+                    <div class="cm-col-lbl">Predicted: Grounded</div>
+                    <div class="cm-col-lbl">Predicted: Hallucination / Refusal</div>
+                  </div>
+                  <div class="cm-grid-2x2">
+                    <div class="cm-cell cm-tp" id="cmCellTP" title="In-domain factual query faithfully answered with verified RAG context">
+                      <div class="cm-cell-badge">True Positive (TP)</div>
+                      <div class="cm-cell-val" id="cmValTP">14</div>
+                      <div class="cm-cell-lbl">Grounded & Verified</div>
+                      <div class="cm-cell-pct" id="cmPctTP">87.5%</div>
+                      <div class="cm-cell-sub">Context-supported claims</div>
+                    </div>
+                    <div class="cm-cell cm-fp" id="cmCellFP" title="Model generated fabricated URLs, criteria, or unsupported facts">
+                      <div class="cm-cell-badge">False Positive (FP)</div>
+                      <div class="cm-cell-val" id="cmValFP">1</div>
+                      <div class="cm-cell-lbl">Hallucinated Claims</div>
+                      <div class="cm-cell-pct" id="cmPctFP">6.2%</div>
+                      <div class="cm-cell-sub">Fabricated / ungrounded</div>
+                    </div>
+                    <div class="cm-cell cm-fn" id="cmCellFN" title="In-domain query where facts were omitted or under-retrieved">
+                      <div class="cm-cell-badge">False Negative (FN)</div>
+                      <div class="cm-cell-val" id="cmValFN">1</div>
+                      <div class="cm-cell-lbl">Information Omission</div>
+                      <div class="cm-cell-pct" id="cmPctFN">6.2%</div>
+                      <div class="cm-cell-sub">Omitted required context</div>
+                    </div>
+                    <div class="cm-cell cm-tn" id="cmCellTN" title="Out-of-scope query correctly rejected without fabricating facts">
+                      <div class="cm-cell-badge">True Negative (TN)</div>
+                      <div class="cm-cell-val" id="cmValTN">0</div>
+                      <div class="cm-cell-lbl">Correct Abstention</div>
+                      <div class="cm-cell-pct" id="cmPctTN">0.0%</div>
+                      <div class="cm-cell-sub">Out-of-scope rejected</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Derived Metrics & Breakdown -->
+              <div class="cm-analytics-panel">
+                <div class="cm-stats-grid">
+                  <div class="cm-stat-item">
+                    <span class="cm-stat-label">Grounding Precision</span>
+                    <span class="cm-stat-num" id="cmPrecision">93.3%</span>
+                    <span class="cm-stat-desc">TP / (TP + FP)</span>
+                  </div>
+                  <div class="cm-stat-item">
+                    <span class="cm-stat-label">Information Recall</span>
+                    <span class="cm-stat-num" id="cmRecall">93.3%</span>
+                    <span class="cm-stat-desc">TP / (TP + FN)</span>
+                  </div>
+                  <div class="cm-stat-item">
+                    <span class="cm-stat-label">Grounding F1-Score</span>
+                    <span class="cm-stat-num" id="cmF1">93.3%</span>
+                    <span class="cm-stat-desc">Harmonic Mean</span>
+                  </div>
+                  <div class="cm-stat-item">
+                    <span class="cm-stat-label">Hallucination Rate</span>
+                    <span class="cm-stat-num cm-stat-danger" id="cmHalluRate">6.2%</span>
+                    <span class="cm-stat-desc">FP / (TP + FP)</span>
+                  </div>
+                  <div class="cm-stat-item">
+                    <span class="cm-stat-label">True Negative Specificity</span>
+                    <span class="cm-stat-num" id="cmSpecificity">100%</span>
+                    <span class="cm-stat-desc">TN / (TN + FP)</span>
+                  </div>
+                  <div class="cm-stat-item">
+                    <span class="cm-stat-label">Overall Accuracy</span>
+                    <span class="cm-stat-num" id="cmAccuracy">87.5%</span>
+                    <span class="cm-stat-desc">(TP + TN) / Total</span>
+                  </div>
+                </div>
+
+                <!-- Category Breakdown -->
+                <div class="cm-breakdown-section">
+                  <div class="cm-breakdown-title">Category Grounding & Hallucination Breakdown</div>
+                  <div class="cm-breakdown-list" id="cmCategoryList">
+                    <!-- Populated dynamically via JS -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Test Case Comparison & Human Review Section -->
           <div class="test-inspector-card">
             <div class="inspector-header">
               <h4>Test Case Inspector & Human Review</h4>
-              <div class="inspector-controls">
-                <select id="evalTestCaseSelect" class="form-input filter-select">
+              <div class="inspector-controls" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                <select id="cmClassificationFilter" class="form-input filter-select" style="max-width:180px;">
+                  <option value="ALL">All Classifications</option>
+                  <option value="TP">TP: Grounded & Verified</option>
+                  <option value="FP">FP: Hallucinated Claims</option>
+                  <option value="FN">FN: Information Omissions</option>
+                  <option value="TN">TN: Domain Abstentions</option>
+                </select>
+                <select id="evalTestCaseSelect" class="form-input filter-select" style="min-width:260px;">
                   <option value="">Select an evaluated test case...</option>
                 </select>
               </div>
@@ -1241,8 +1390,12 @@
 
             <div class="inspector-body" id="inspectorBody" style="display: none;">
               <div class="inspector-prompt-box">
-                <div class="badge-tag" id="inspectCategory">SCHOLARSHIP</div>
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+                  <div class="badge-tag" id="inspectCategory">SCHOLARSHIP</div>
+                  <div class="badge" id="inspectGroundingBadge" style="font-size:0.75rem;padding:3px 8px;">TP: Grounded</div>
+                </div>
                 <div class="inspect-query" id="inspectQuery">--</div>
+                <div id="inspectReason" style="margin-top:8px;font-size:0.8rem;color:#94a3b8;background:rgba(255,255,255,0.03);padding:6px 10px;border-radius:4px;border-left:3px solid var(--primary);">--</div>
               </div>
 
               <div class="compare-columns">

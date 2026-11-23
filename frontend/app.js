@@ -445,6 +445,9 @@ function setupEventListeners() {
   document.getElementById("paramTunerForm")?.addEventListener("submit", handleSingleParamTest);
   document.getElementById("resetParamBtn")?.addEventListener("click", resetParamDefaults);
   document.getElementById("evalTestCaseSelect")?.addEventListener("change", handleTestCaseSelect);
+  document.getElementById("cmClassificationFilter")?.addEventListener("change", (e) => {
+    populateTestCaseSelect(e.target.value);
+  });
   document.getElementById("saveFeedbackBtn")?.addEventListener("click", handleSaveHumanFeedback);
   document.getElementById("refreshHistoryBtn")?.addEventListener("click", loadBenchmarkHistory);
   document.getElementById("historyFilterType")?.addEventListener("change", loadBenchmarkHistory);
@@ -2024,6 +2027,21 @@ async function openEvaluationModal() {
   await loadRealUsageOverview();
   await loadCurrentModelConfig();
   await loadBenchmarkHistory();
+  await fetchConfusionMatrixOverview();
+}
+
+async function fetchConfusionMatrixOverview() {
+  try {
+    const res = await fetch(`${API_BASE}/api/evaluation/confusion-matrix`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.confusion_matrix) {
+        renderConfusionMatrix(data.confusion_matrix);
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to fetch confusion matrix overview:", err);
+  }
 }
 
 async function fetchModelInfo() {
@@ -2274,23 +2292,87 @@ async function loadRunDetail(runId) {
     const halluPct = results.length > 0 ? (hallucinatedCount / results.length) * 100 : 0;
     document.getElementById("qcHallucination").textContent = `${halluPct.toFixed(1)}%`;
 
-    // Test Case Inspector Select
-    const select = document.getElementById("evalTestCaseSelect");
-    select.innerHTML = '<option value="">Select an evaluated test case...</option>';
-    results.forEach((r, idx) => {
-      const opt = document.createElement("option");
-      opt.value = r.id;
-      opt.textContent = `[${r.test_case_id || `Case ${idx + 1}`}] ${r.prompt.slice(0, 50)}... (${r.category})`;
-      select.appendChild(opt);
-    });
-
-    if (results.length > 0) {
-      select.value = results[0].id;
-      renderTestCaseInspector(results[0]);
+    // Render 2x2 Grounding & Hallucination Confusion Matrix
+    if (data.confusion_matrix) {
+      renderConfusionMatrix(data.confusion_matrix);
     }
+
+    // Populate Test Case Inspector Select with classification badges
+    populateTestCaseSelect("ALL");
   } catch (err) {
     console.error("Failed to load run detail:", err);
   }
+}
+
+function renderConfusionMatrix(cm) {
+  if (!cm) return;
+  setEl("cmValTP", cm.tp);
+  setEl("cmPctTP", `${cm.total > 0 ? ((cm.tp / cm.total) * 100).toFixed(1) : 0}%`);
+  setEl("cmValFP", cm.fp);
+  setEl("cmPctFP", `${cm.total > 0 ? ((cm.fp / cm.total) * 100).toFixed(1) : 0}%`);
+  setEl("cmValFN", cm.fn);
+  setEl("cmPctFN", `${cm.total > 0 ? ((cm.fn / cm.total) * 100).toFixed(1) : 0}%`);
+  setEl("cmValTN", cm.tn);
+  setEl("cmPctTN", `${cm.total > 0 ? ((cm.tn / cm.total) * 100).toFixed(1) : 0}%`);
+
+  setEl("cmPrecision", `${cm.precision_pct}%`);
+  setEl("cmRecall", `${cm.recall_pct}%`);
+  setEl("cmF1", `${cm.f1_score_pct}%`);
+  setEl("cmHalluRate", `${cm.hallucination_rate_pct}%`);
+  setEl("cmSpecificity", `${cm.specificity_pct}%`);
+  setEl("cmAccuracy", `${cm.accuracy_pct}%`);
+  setEl("cmSafetyStatus", `Safety: ${cm.safety_status}`);
+  setEl("cmTotalCasesBadge", `${cm.total} Cases Tested`);
+
+  // Category Breakdown Progress Bars
+  const catList = document.getElementById("cmCategoryList");
+  if (catList && cm.category_breakdown) {
+    catList.innerHTML = "";
+    cm.category_breakdown.forEach(c => {
+      const row = document.createElement("div");
+      row.className = "cm-cat-row";
+      row.innerHTML = `
+        <span class="cm-cat-name" title="${c.category}">${c.category}</span>
+        <div class="cm-bar-track">
+          <div class="cm-bar-grounded" style="width:${c.grounded_pct}%;" title="Grounded: ${c.grounded_pct}%"></div>
+          <div class="cm-bar-hallu" style="width:${c.hallucination_pct}%;" title="Hallucination: ${c.hallucination_pct}%"></div>
+        </div>
+        <span class="cm-cat-stat">${c.tp}/${c.total} (${c.grounded_pct}%)</span>
+      `;
+      catList.appendChild(row);
+    });
+  }
+}
+
+function populateTestCaseSelect(filterCls = "ALL") {
+  const select = document.getElementById("evalTestCaseSelect");
+  if (!select) return;
+  select.innerHTML = '<option value="">Select an evaluated test case...</option>';
+
+  const filtered = (filterCls === "ALL")
+    ? currentEvaluatedResults
+    : currentEvaluatedResults.filter(r => (r.grounding_classification || (r.hallucination_detected ? "FP" : "TP")) === filterCls);
+
+  if (!filtered || filtered.length === 0) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = `No test cases found for classification "${filterCls}"`;
+    select.appendChild(opt);
+    const body = document.getElementById("inspectorBody");
+    if (body) body.style.display = "none";
+    return;
+  }
+
+  filtered.forEach((r, idx) => {
+    const opt = document.createElement("option");
+    opt.value = r.id;
+    const clsTag = r.grounding_classification ? `[${r.grounding_classification}] ` : "";
+    opt.textContent = `${clsTag}${r.test_case_id || `Case ${idx + 1}`}: ${r.prompt.slice(0, 45)}... (${r.category})`;
+    select.appendChild(opt);
+  });
+
+  select.value = filtered[0].id;
+  renderTestCaseInspector(filtered[0]);
 }
 
 function handleTestCaseSelect(e) {
@@ -2310,6 +2392,22 @@ function renderTestCaseInspector(r) {
   document.getElementById("inspectExpected").textContent = r.expected_output || "Grounded Maharashtra OBC scheme guidance matching official portal.";
   document.getElementById("inspectGenerated").innerHTML = renderMarkdown(r.generated_response);
   document.getElementById("humanFeedbackInput").value = r.human_feedback || "";
+
+  const cls = r.grounding_classification || (r.hallucination_detected ? "FP" : "TP");
+  const badge = document.getElementById("inspectGroundingBadge");
+  if (badge) {
+    badge.textContent = `${cls}: ${cls === "TP" ? "Grounded & Verified" : (cls === "FP" ? "Hallucination Detected" : (cls === "TN" ? "Domain Abstention" : "Information Omission"))}`;
+    badge.style.background = cls === "TP" ? "rgba(16, 185, 129, 0.2)" : (cls === "FP" ? "rgba(239, 68, 68, 0.2)" : (cls === "TN" ? "rgba(59, 130, 246, 0.2)" : "rgba(245, 158, 11, 0.2)"));
+    badge.style.color = cls === "TP" ? "#34d399" : (cls === "FP" ? "#f87171" : (cls === "TN" ? "#60a5fa" : "#fbbf24"));
+    badge.style.borderColor = cls === "TP" ? "#10b981" : (cls === "FP" ? "#ef4444" : (cls === "TN" ? "#3b82f6" : "#f59e0b"));
+  }
+
+  const reasonEl = document.getElementById("inspectReason");
+  if (reasonEl) {
+    reasonEl.textContent = r.classification_reason || (r.hallucination_detected ? "Model generated unsupported web links, figures, or unverified eligibility rules." : "Grounded and faithful factual answer verified against RAG context.");
+    reasonEl.style.borderLeftColor = cls === "TP" ? "#10b981" : (cls === "FP" ? "#ef4444" : (cls === "TN" ? "#3b82f6" : "#f59e0b"));
+  }
+
   setStarRating(r.human_rating || 0);
 }
 
@@ -2545,6 +2643,19 @@ async function loadRealUsageOverview() {
     if (document.getElementById("adminUsageConvs")) document.getElementById("adminUsageConvs").textContent = fmt(u.total_conversations);
     if (document.getElementById("adminUsageTokens")) document.getElementById("adminUsageTokens").textContent = fmt(u.estimated_total_tokens);
     if (document.getElementById("adminUsageUsers")) document.getElementById("adminUsageUsers").textContent = String(u.total_users || 1);
+
+    // Admin Modal - Executive Confusion Matrix Strip
+    if (u.confusion_matrix) {
+      const cm = u.confusion_matrix;
+      if (document.getElementById("adminCmTP")) document.getElementById("adminCmTP").textContent = cm.tp;
+      if (document.getElementById("adminCmFP")) document.getElementById("adminCmFP").textContent = cm.fp;
+      if (document.getElementById("adminCmFN")) document.getElementById("adminCmFN").textContent = cm.fn;
+      if (document.getElementById("adminCmTN")) document.getElementById("adminCmTN").textContent = cm.tn;
+      if (document.getElementById("adminCmPrecision")) document.getElementById("adminCmPrecision").textContent = `${cm.precision_pct}%`;
+      if (document.getElementById("adminCmRecall")) document.getElementById("adminCmRecall").textContent = `${cm.recall_pct}%`;
+      if (document.getElementById("adminCmHalluRate")) document.getElementById("adminCmHalluRate").textContent = `${cm.hallucination_rate_pct}%`;
+      if (document.getElementById("adminCmSafetyBadge")) document.getElementById("adminCmSafetyBadge").textContent = cm.safety_status;
+    }
 
     // Language pills in Admin tab
     const langContainer = document.getElementById("adminLangDistribution");
